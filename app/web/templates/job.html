@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Review batch · Leak Inspect{% endblock %}
+{% block body %}
+<a class="back" href="/">← New batch</a>
+<div class="spread">
+  <div>
+    <p class="eyebrow">Stocktake</p>
+    <h1 id="title">Confirm what will be inspected</h1>
+  </div>
+  <div class="row">
+    <button class="btn" id="confirm" type="button">Start inspection →</button>
+  </div>
+</div>
+<p class="lede">Review the extracted content below. Nothing has been inspected yet. Starting will
+run every item through the three gates.</p>
+
+<div class="panel tight">
+  <table>
+    <thead><tr><th>#</th><th>Source</th><th>Type</th><th>Format</th>
+      <th class="num">Size</th><th class="num">Characters</th><th class="num">Segments</th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+</div>
+<div id="notes"></div>
+<span id="err" style="color:var(--block);font-family:var(--mono);font-size:12.5px"></span>
+{% endblock %}
+
+{% block script %}
+<script>
+const JID = "{{ jid }}";
+async function load(){
+  const j = await api("GET","/api/jobs/"+JID);
+  document.getElementById("title").textContent =
+    (j.name? j.name+" — " : "") + j.item_count + " item" + (j.item_count===1?"":"s");
+  document.getElementById("rows").innerHTML = j.items.map(it=>{
+    const flag = it.segment_count===0
+      ? `<span class="note" style="display:inline-block;margin:0">no extractable text</span>` : "";
+    return `<tr><td class="num">${it.seq+1}</td>
+      <td class="name">${esc(it.source_name)} ${flag}</td>
+      <td><span class="kind">${esc(it.kind)}</span></td>
+      <td class="name">${esc(it.fmt||"—")}</td>
+      <td class="num">${fmtBytes(it.size_bytes)}</td>
+      <td class="num">${it.extracted_chars.toLocaleString()}</td>
+      <td class="num">${it.segment_count}</td></tr>`;
+  }).join("");
+  if(j.status!=="DRAFT"){ // already confirmed — jump to monitor
+    location.href = j.status==="DONE" ? "/jobs/"+JID+"/results" : "/jobs/"+JID+"/monitor";
+  }
+}
+document.getElementById("confirm").onclick=async()=>{
+  const b=document.getElementById("confirm"); b.disabled=true; b.textContent="Starting…";
+  try{ await api("POST","/api/jobs/"+JID+"/confirm"); location.href="/jobs/"+JID+"/monitor"; }
+  catch(e){ document.getElementById("err").textContent=e.message; b.disabled=false; b.textContent="Start inspection →"; }
+};
+load().catch(e=>document.getElementById("err").textContent=e.message);
+</script>
+{% endblock %}

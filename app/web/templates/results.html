@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Results · Leak Inspect{% endblock %}
+{% block body %}
+<a class="back" href="/">← New batch</a>
+<p class="eyebrow">Inspection complete</p>
+<h1>Results</h1>
+
+<div class="spread" style="margin:18px 0 26px;align-items:flex-start">
+  <div class="tally" id="tally" style="flex:1"></div>
+  <div id="stamp"></div>
+</div>
+
+<div class="panel tight">
+  <table>
+    <thead><tr><th>#</th><th>Source</th><th>Verdict</th><th></th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+</div>
+{% endblock %}
+
+{% block script %}
+<script>
+const JID="{{ jid }}";
+async function load(){
+  const s=await api("GET","/api/jobs/"+JID+"/results");
+  const counts={PASS:0,REVIEW:0,BLOCK:0};
+  s.items.forEach(it=>{ counts[it.decision]=(counts[it.decision]||0)+1; });
+  document.getElementById("tally").innerHTML=["PASS","REVIEW","BLOCK"].map(k=>(
+    `<div class="t ${k}"><div class="c">${counts[k]||0}</div><div class="l">${k}</div></div>`)).join("");
+  const agg=s.decision||"REVIEW";
+  document.getElementById("stamp").innerHTML=
+    `<div class="stamp ${agg}"><div class="cap">Batch</div><div class="big">${agg}</div></div>`;
+  document.getElementById("rows").innerHTML=s.items.map(it=>(
+    `<tr><td class="num">${it.seq+1}</td><td class="name">${esc(it.source_name)}</td>
+     <td>${verdict(it.decision)}</td>
+     <td style="text-align:right"><a class="linkish" href="/jobs/${JID}/items/${it.id}">evidence →</a></td></tr>`)).join("");
+}
+load().catch(e=>document.body.insertAdjacentHTML("beforeend","<p style='color:var(--block)'>"+esc(e.message)+"</p>"));
+</script>
+{% endblock %}

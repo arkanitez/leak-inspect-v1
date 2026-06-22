@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Jobs · Leak Inspect{% endblock %}
+{% block body %}
+<p class="eyebrow">Submitted batches</p>
+<h1>Jobs</h1>
+<p class="lede">Every batch submitted to this console. In-progress batches update live; completed
+batches link straight to their results — no need to keep the original tab open.</p>
+
+<section class="jobsec">
+  <h2>In progress<span class="cnt" id="ip-cnt"></span></h2>
+  <div class="panel tight" id="ip-wrap" hidden>
+    <table>
+      <thead><tr><th>Batch</th><th>Submitted</th><th class="num">Items</th><th>Progress</th><th></th></tr></thead>
+      <tbody id="ip-rows"></tbody>
+    </table>
+  </div>
+  <div class="empty" id="ip-empty" hidden>No batches are currently running.</div>
+</section>
+
+<section class="jobsec">
+  <h2>Completed<span class="cnt" id="done-cnt"></span></h2>
+  <div class="panel tight" id="done-wrap" hidden>
+    <table>
+      <thead><tr><th>Batch</th><th>Submitted</th><th class="num">Items</th><th>Verdict</th><th></th></tr></thead>
+      <tbody id="done-rows"></tbody>
+    </table>
+  </div>
+  <div class="empty" id="done-empty" hidden>No completed batches yet.</div>
+</section>
+{% endblock %}
+
+{% block script %}
+<script>
+function rows(list, kind){
+  return list.map(j=>{
+    const when = fmtTime(j.confirmed_at || j.created_at);
+    const target = kind==="ip" ? "/jobs/"+j.id+"/monitor" : "/jobs/"+j.id+"/results";
+    const lastCell = kind==="ip"
+      ? `<td><span class="prog-mini">${j.done}/${j.item_count}</span></td>`
+      : `<td>${verdict(j.decision||"REVIEW")}</td>`;
+    const cta = kind==="ip" ? "view →" : "results →";
+    return `<tr class="jrow" data-href="${target}">
+      <td class="name">${esc(j.label)}</td>
+      <td class="when">${esc(when)}</td>
+      <td class="num">${j.item_count}</td>
+      ${lastCell}
+      <td style="text-align:right"><a class="linkish" href="${target}">${cta}</a></td>
+    </tr>`;
+  }).join("");
+}
+function fill(tbodyId, wrapId, emptyId, cntId, list, kind){
+  document.getElementById(cntId).textContent = list.length ? " · "+list.length : "";
+  document.getElementById(wrapId).hidden = list.length===0;
+  document.getElementById(emptyId).hidden = list.length>0;
+  document.getElementById(tbodyId).innerHTML = list.length ? rows(list, kind) : "";
+}
+async function load(){
+  let d;
+  try{ d = await api("GET","/api/jobs"); }
+  catch(e){ document.getElementById("ip-empty").hidden=false;
+            document.getElementById("ip-empty").textContent="Could not load jobs: "+e.message; return; }
+  fill("ip-rows","ip-wrap","ip-empty","ip-cnt", d.in_progress, "ip");
+  fill("done-rows","done-wrap","done-empty","done-cnt", d.completed, "done");
+  document.querySelectorAll(".jrow").forEach(r=>{
+    r.onclick = e => { if(e.target.tagName!=="A") location.href = r.dataset.href; };
+  });
+  if(d.in_progress.length > 0) setTimeout(load, 2500);   // live-refresh while running
+}
+load();
+</script>
+{% endblock %}

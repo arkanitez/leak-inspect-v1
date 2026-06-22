@@ -1,0 +1,41 @@
+# ---------------------------------------------------------------------------
+# Leak-Inspect pipeline — runtime requirements
+# ---------------------------------------------------------------------------
+# Web + parsing layer (always required; this alone runs the service in the
+# default MODEL_BACKEND=mock mode for the demo, with no model weights).
+# These are exact pins (PyPI retains all versions, so they stay installable).
+fastapi==0.137.2
+uvicorn[standard]==0.40.0
+jinja2==3.1.6
+python-multipart==0.0.20
+pydantic==2.13.4
+pypdf==5.9.0
+defusedxml==0.7.1
+
+# Optional: Keycloak OIDC auth (only when AUTH_ENABLED=true).
+PyJWT[crypto]==2.10.1
+
+# ---------------------------------------------------------------------------
+# Model layer — required only for MODEL_BACKEND=transformers (the real
+# Prompt Guard 2 + inspector stages). CPU-only.
+#
+# NOTE on versioning: these are deliberately NOT hard-pinned. The PyTorch CPU
+# wheel index prunes old releases, and the inspector (Qwen3) needs a recent
+# transformers, so exact pins rot. We take the latest compatible builds at
+# provision time; the resulting wheels are then frozen inside the offline
+# bundle, so the air-gapped install is still fully reproducible.
+#
+#   * torch        — unpinned; provision.sh fetches the latest CPU build from
+#                    https://download.pytorch.org/whl/cpu
+#   * transformers — >=4.51 is REQUIRED for Qwen3; capped <5 to stay on the 4.x
+#                    API line this code is written against.
+# transformers pulls compatible huggingface_hub / tokenizers / safetensors.
+#
+# Install torch separately from the CPU index first (no CUDA), then this file:
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+#   pip install -r requirements.txt
+# ---------------------------------------------------------------------------
+torch
+transformers>=4.51,<5
+accelerate>=0.30,<2
+sentencepiece>=0.2

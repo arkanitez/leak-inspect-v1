@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}New inspection · Leak Inspect{% endblock %}
+{% block body %}
+<p class="eyebrow">Outbound transfer inspection</p>
+<h1>Inspect content before it crosses domains</h1>
+<p class="lede">Stage documents or text headed from the high side to the low side. Each item passes
+three gates — a deterministic character pass, a prompt-injection shield, then an LLM leakage
+inspector — and is returned a verdict with the evidence behind it.</p>
+
+{{ rail_placeholder if false }}
+<div id="rail"></div>
+
+<div class="panel" style="margin-top:26px">
+  <label class="fld" for="drop">Documents</label>
+  <div class="drop" id="drop" tabindex="0" role="button" aria-label="Add files">
+    <strong>Drop files here</strong> or click to browse
+    <div class="hint">.docx · .xlsx · .pptx · .pdf · .txt / .csv — headers, comments, notes,
+      tracked changes &amp; metadata are all inspected</div>
+    <input id="file" type="file" multiple hidden>
+  </div>
+  <ul class="filelist" id="files"></ul>
+</div>
+
+<div class="panel">
+  <label class="fld" for="text0">Or paste text</label>
+  <div id="texts"></div>
+  <button class="btn ghost sm" id="addText" type="button" style="margin-top:10px">+ Another text block</button>
+</div>
+
+<div class="panel">
+  <label class="fld" for="name">Batch label <span class="sub">(optional)</span></label>
+  <input id="name" type="text" placeholder="e.g. Q2 HR export — 2026-06-20">
+</div>
+
+<div class="row" style="margin-top:8px">
+  <button class="btn" id="go" type="button">Stage batch →</button>
+  <span id="err" style="color:var(--block);font-family:var(--mono);font-size:12.5px"></span>
+</div>
+{% endblock %}
+
+{% block script %}
+<script>
+document.getElementById("rail").innerHTML = renderRail();
+
+const picked = [];                       // {name, file}
+const fileInput = document.getElementById("file");
+const drop = document.getElementById("drop");
+const filesEl = document.getElementById("files");
+
+function renderFiles(){
+  filesEl.innerHTML = picked.map((p,i)=>(
+    `<li><span>${esc(p.name)}</span><span class="sz">${fmtBytes(p.file.size)}</span>`+
+    `<span class="x" data-i="${i}" title="Remove">✕</span></li>`)).join("");
+  filesEl.querySelectorAll(".x").forEach(x=>x.onclick=()=>{picked.splice(+x.dataset.i,1);renderFiles();});
+}
+function addFiles(list){ for(const f of list) picked.push({name:f.name,file:f}); renderFiles(); }
+
+drop.onclick=()=>fileInput.click();
+drop.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();fileInput.click();}};
+fileInput.onchange=()=>addFiles(fileInput.files);
+;["dragenter","dragover"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add("over");}));
+;["dragleave","drop"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove("over");}));
+drop.addEventListener("drop",e=>addFiles(e.dataTransfer.files));
+
+// dynamic text blocks
+const textsEl = document.getElementById("texts");
+let tcount=0;
+function addText(){
+  const id="text"+(tcount++);
+  const wrap=document.createElement("div");
+  wrap.style.marginBottom="8px";
+  wrap.innerHTML=`<textarea id="${id}" rows="3" placeholder="Paste content to inspect…"></textarea>`;
+  textsEl.appendChild(wrap);
+}
+addText();
+document.getElementById("addText").onclick=addText;
+
+document.getElementById("go").onclick=async()=>{
+  const err=document.getElementById("err"); err.textContent="";
+  const fd=new FormData();
+  picked.forEach(p=>fd.append("files",p.file,p.name));
+  textsEl.querySelectorAll("textarea").forEach(t=>{ if(t.value.trim()) fd.append("texts",t.value); });
+  const name=document.getElementById("name").value.trim(); if(name) fd.append("name",name);
+  if(![...fd.keys()].length){ err.textContent="Add at least one file or text block."; return; }
+  const go=document.getElementById("go"); go.disabled=true; go.textContent="Staging…";
+  try{
+    const job=await api("POST","/api/jobs",{body:fd});
+    location.href="/jobs/"+job.id;
+  }catch(e){ err.textContent=e.message; go.disabled=false; go.textContent="Stage batch →"; }
+};
+</script>
+{% endblock %}

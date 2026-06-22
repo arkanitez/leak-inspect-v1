@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Inspecting · Leak Inspect{% endblock %}
+{% block body %}
+<a class="back" href="/">← New batch</a>
+<p class="eyebrow">In progress</p>
+<h1>Inspecting batch</h1>
+<p class="lede">Each item is passing the three gates in sequence. This view updates live.</p>
+
+<div class="panel">
+  <div class="prog"><i id="bar"></i></div>
+  <div class="progmeta"><span id="count">0 / 0</span><span id="state">queued</span></div>
+</div>
+
+<div class="panel tight">
+  <table>
+    <thead><tr><th>#</th><th>Source</th><th>Status</th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+</div>
+{% endblock %}
+
+{% block script %}
+<script>
+const JID="{{ jid }}";
+async function tick(){
+  let s;
+  try{ s=await api("GET","/api/jobs/"+JID+"/status"); }catch(e){ return setTimeout(tick,1000); }
+  const pct = s.total ? Math.round(100*s.done/s.total) : 0;
+  document.getElementById("bar").style.width=pct+"%";
+  document.getElementById("count").textContent=s.done+" / "+s.total+" inspected";
+  document.getElementById("state").textContent=s.status.toLowerCase();
+  document.getElementById("rows").innerHTML=s.items.map(it=>(
+    `<tr><td class="num">${it.seq+1}</td><td class="name">${esc(it.source_name)}</td>
+     <td>${statusChip(it.status,it.decision)}</td></tr>`)).join("");
+  if(s.status==="DONE"){ setTimeout(()=>location.href="/jobs/"+JID+"/results",550); return; }
+  setTimeout(tick,700);
+}
+tick();
+</script>
+{% endblock %}

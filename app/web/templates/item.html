@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}Evidence · Leak Inspect{% endblock %}
+{% block body %}
+<a class="back" href="/jobs/{{ jid }}/results">← Back to results</a>
+<div class="spread" style="align-items:flex-start">
+  <div>
+    <p class="eyebrow">Item evidence</p>
+    <h1 id="title" class="mono" style="font-size:20px"></h1>
+    <p class="sub" id="meta"></p>
+  </div>
+  <div id="stamp"></div>
+</div>
+
+<div id="rail" style="margin:20px 0 28px"></div>
+<div id="findings"></div>
+{% endblock %}
+
+{% block script %}
+<script>
+const JID="{{ jid }}", IID="{{ iid }}";
+const GATE_META={charguard:{n:"01",t:"charguard"},promptguard:{n:"02",t:"Prompt Guard 2"},inspector:{n:"03",t:"Inspector"}};
+const MASK_LABEL={SECRET_CREDENTIAL:"credential",PII:"personal identifier",PCI_FINANCIAL:"financial data"};
+const DOTS="••••••";
+
+function findingRow(f, withProv){
+  const sev=(f.severity||"LOW").toUpperCase();
+  const prov=(withProv&&f.provenance)?`<span class="prov">${esc(f.provenance)}</span>`:"";
+  const cap=f.verbatim?`<div class="captured"><div class="cl">Captured content</div><pre>${esc(f.verbatim)}</pre></div>`:"";
+  return `<div class="finding ${sev}"><div class="fh">
+    <span class="ft">${esc(f.title)}</span>
+    <span class="sev">${sev}</span>
+    <span class="code">${esc(f.code)}</span>${prov}</div>
+    <p class="why">${esc(f.explanation||"")}</p>${cap}</div>`;
+}
+function renderParts(parts, prov){
+  return parts.map(p=>{
+    if(p.kind==="plain") return esc(p.t);
+    if(p.kind==="hl") return `<span class="hl" title="${esc(p.code)}">${esc(p.t)}</span>`;
+    const lbl=MASK_LABEL[p.code]||"sensitive";
+    return `<span class="mask" data-prov="${esc(prov)}" data-mid="${p.mid}" role="button" tabindex="0" `+
+           `title="${esc(lbl)} — click to reveal"><span class="dots">${DOTS}</span><span class="rv">reveal</span></span>`;
+  }).join("");
+}
+function sourceBlock(prov, parts){
+  return `<div class="segtext"><div class="sl">Source — ${esc(prov)}</div>`+
+         `<div class="st">${renderParts(parts, prov)}</div></div>`;
+}
+function gateOpen(gid, n){
+  const gm=GATE_META[gid];
+  return `<div class="gate-group"><div class="gh"><span class="gn">${gm.n}</span>
+    <span class="gt">${esc(gm.t)}</span><span class="gs">${n} finding${n===1?"":"s"}</span></div>`;
+}
+
+async function load(){
+  const d=await api("GET","/api/jobs/"+JID+"/items/"+IID);
+  document.getElementById("title").textContent=d.source_name;
+  document.getElementById("meta").textContent=
+    `${d.fmt||"—"} · ${d.kind.toLowerCase()} · risk ${(d.risk_tier||"none").toLowerCase()}`;
+  document.getElementById("stamp").innerHTML=
+    `<div class="stamp ${d.decision}"><div class="cap">Verdict</div><div class="big">${d.decision}</div></div>`;
+
+  const byStage={CHARGUARD:[],PROMPTGUARD:[],INSPECTOR:[]};
+  d.findings.forEach(f=>{ (byStage[f.stage]||(byStage[f.stage]=[])).push(f); });
+  const segMap={}; (d.segments||[]).forEach(s=>segMap[s.provenance]=s.parts);
+  const inspectorProvs=new Set((byStage.INSPECTOR||[]).map(f=>f.provenance).filter(Boolean));
+
+  // rail: which gates fired
+  const hits={}, benign=new Set();
+  for(const [gid,key] of [["charguard","CHARGUARD"],["promptguard","PROMPTGUARD"],["inspector","INSPECTOR"]]){
+    const n=(byStage[key]||[]).length;
+    if(n) hits[gid]=n+" finding"+(n===1?"":"s");
+    else if(d.stages && d.stages[gid] && d.stages[gid]!=="n/a") benign.add(gid);
+  }
+  document.getElementById("rail").innerHTML=renderRail(hits,benign);
+
+  let html="", any=false;
+
+  // 01 charguard — flat, with captured verbatim
+  const cg=byStage.CHARGUARD||[];
+  if(cg.length){ any=true; html+=gateOpen("charguard",cg.length)+cg.map(f=>findingRow(f,true)).join("")+`</div>`; }
+
+  // 02 prompt guard — flat; show the injecting text for prompt-guard-only segments
+  const pg=byStage.PROMPTGUARD||[];
+  if(pg.length){
+    any=true; html+=gateOpen("promptguard",pg.length);
+    const shown=new Set();
+    html+=pg.map(f=>{
+      let b=findingRow(f,true);
+      const p=f.provenance;
+      if(p && !inspectorProvs.has(p) && segMap[p] && !shown.has(p)){ shown.add(p); b+=sourceBlock(p, segMap[p]); }
+      return b;
+    }).join("");
+    html+=`</div>`;
+  }
+
+  // 03 inspector — segment-centric: original text + the spans behind each finding
+  const insp=byStage.INSPECTOR||[];
+  if(insp.length){
+    any=true;
+    const byProv={};
+    insp.forEach(f=>{ (byProv[f.provenance||"—"]||(byProv[f.provenance||"—"]=[])).push(f); });
+    const order=(d.segments||[]).map(s=>s.provenance).filter(p=>p in byProv);
+    Object.keys(byProv).forEach(p=>{ if(order.indexOf(p)<0) order.push(p); });
+    html+=gateOpen("inspector",insp.length);
+    order.forEach(prov=>{
+      const parts=segMap[prov];
+      html+=`<div class="seg-block">`;
+      html+= parts ? sourceBlock(prov, parts) : `<div class="sl solo">Source — ${esc(prov)} (no locatable span)</div>`;
+      html+=byProv[prov].map(f=>findingRow(f,false)).join("");
+      html+=`</div>`;
+    });
+    html+=`</div>`;
+  }
+
+  if(!any) html=`<div class="clear">Cleared all three gates — no findings.</div>`;
+  const root=document.getElementById("findings");
+  root.innerHTML=html;
+
+  // click-to-reveal: fetch the masked cleartext only on explicit action
+  root.querySelectorAll(".mask").forEach(el=>{
+    const go=async()=>{
+      if(el.dataset.done) return;
+      try{
+        const r=await api("GET","/api/jobs/"+JID+"/items/"+IID+"/reveal?prov="+
+          encodeURIComponent(el.dataset.prov)+"&mid="+el.dataset.mid);
+        el.textContent=r.value; el.classList.add("revealed"); el.dataset.done="1"; el.removeAttribute("title");
+      }catch(e){ el.title=e.message; }
+    };
+    el.onclick=go;
+    el.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); go(); } };
+  });
+}
+load().catch(e=>document.getElementById("findings").innerHTML=
+  `<p style="color:var(--block)">${esc(e.message)}</p>`);
+</script>
+{% endblock %}

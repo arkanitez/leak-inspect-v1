@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Inspection Pipeline{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="station">
+    <a class="brand" href="/">CROSS&#8209;DOMAIN <b>/</b> LEAK INSPECT</a>
+    {% set _p = request.url.path %}
+    <nav class="nav">
+      <a href="/" class="{{ 'active' if _p == '/' else '' }}">New</a>
+      <a href="/jobs" class="{{ 'active' if _p.startswith('/jobs') else '' }}">Jobs</a>
+    </nav>
+    <div class="spacer"></div>
+    <div class="stat hide-sm" id="station-stat"></div>
+  </div>
+  <main class="wrap">
+    {% block body %}{% endblock %}
+  </main>
+  <script src="/static/app.js"></script>
+  {% block script %}{% endblock %}
+</body>
+</html>
