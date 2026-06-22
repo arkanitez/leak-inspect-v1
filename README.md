@@ -67,26 +67,6 @@ deciding whether to download any models.
 
 ## 2. The problem it solves
 
-Some organisations run two (or more) separate networks at different sensitivity
-levels — a **high side** (classified / sensitive) and a **low side** (less
-sensitive, or internet-facing). They are kept physically apart. Moving data from
-the high side to the low side is deliberately hard, because anything that crosses
-could carry sensitive information out with it. This controlled movement is the
-job of a **Cross-Domain Solution (CDS)**: an accredited gateway, often paired with
-a **data diode** (hardware that physically permits data to flow in one direction
-only).
-
-A recurring, concrete instance of this: moving **HR data** — résumés, candidate
-records, job descriptions — from a high-side system to a low-side one. These
-records are full of **free-text fields** (a "summary", "notes", "experience"
-box). Free text is the hard case, because:
-
-- A careless author may paste in a paragraph that still carries a **classification
-  banner**, a **codeword**, a colleague's **national ID**, or a **password**.
-- A malicious insider can deliberately **smuggle** information out by encoding it
-  inside an innocent-looking field — using invisible Unicode characters, look-alike
-  letters, base64/hex blobs, or by phrasing a secret as ordinary prose.
-
 Structured fields (a dropdown, an enum, a date) can be validated exactly. Free
 text cannot — there is no schema for "a paragraph about yourself." That is the gap
 this service addresses: it is the component that looks at the **free-text content**
